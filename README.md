@@ -68,3 +68,16 @@ npm config set registry https://registry.npmjs.org/
 - O Google Maps altera seletores com frequência. Ajustes pontuais podem ser necessários.
 - Scraping pode acionar bloqueios/captcha em volumes altos.
 - Use com responsabilidade e respeite termos legais e regulatórios do seu contexto.
+
+
+### Erro `locator.fill: waiting for #searchboxinput`
+
+Esse erro acontece quando o Google muda a tela inicial, mostra banner de consentimento ou bloqueio temporário.
+
+Nesta versão o scraper já usa URL direta de busca (`/maps/search/...`) e fallback de seletores.
+Se ainda ocorrer, tente:
+
+1. Reduzir volume inicial (`maxLeads` menor, ex: 20).
+2. Testar outro segmento/cidade.
+3. Aguardar alguns minutos e tentar novamente (evita bloqueio temporário do Google).
+4. Rodar com navegador visível para depuração (ajustando `headless: false` no `server.js`).

@@ -22,6 +22,29 @@ async function textOrNull(locator) {
   }
 }
 
+
+async function acceptConsentIfPresent(page, onEvent) {
+  const consentButtons = [
+    'button:has-text("Aceitar tudo")',
+    'button:has-text("Accept all")',
+    'button[aria-label="Aceitar tudo"]',
+  ];
+
+  for (const selector of consentButtons) {
+    const btn = page.locator(selector).first();
+    if (await btn.count()) {
+      try {
+        await btn.click({ timeout: 2500 });
+        onEvent({ type: 'log', message: 'Banner de consentimento aceito.' });
+        await page.waitForTimeout(1200);
+        return;
+      } catch {
+        // tenta próximo seletor
+      }
+    }
+  }
+}
+
 async function getPlaywrightChromium() {
   try {
     const { chromium } = await import('playwright');
@@ -45,22 +68,30 @@ async function scrapeGoogleMaps({ segment, city, state, maxLeads, onEvent }) {
 
   try {
     onEvent({ type: 'log', message: `Abrindo Google Maps para: ${query}` });
-    await page.goto('https://www.google.com/maps', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(query)}`;
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-    const searchInput = page.locator('#searchboxinput');
-    await searchInput.fill(query);
-    onEvent({ type: 'log', message: 'Pesquisa preenchida, iniciando busca...' });
-    await searchInput.press('Enter');
+    await acceptConsentIfPresent(page, onEvent);
 
     const feed = page.locator('div[role="feed"]');
-    await feed.waitFor({ timeout: 30000 });
-    onEvent({ type: 'log', message: 'Lista de cards encontrada.' });
+    const feedFallback = page.locator('a.hfpxzc');
+
+    try {
+      await feed.waitFor({ timeout: 35000 });
+      onEvent({ type: 'log', message: 'Lista de cards encontrada.' });
+    } catch {
+      const fallbackCount = await feedFallback.count();
+      if (!fallbackCount) {
+        throw new Error('Não foi possível localizar a lista de resultados. O Google pode ter exibido bloqueio/captcha.');
+      }
+      onEvent({ type: 'log', message: 'Resultados detectados por seletor alternativo.' });
+    }
 
     let processed = 0;
     let stagnantCycles = 0;
 
     while (leads.length < maxLeads && stagnantCycles < 6) {
-      const cards = page.locator('div[role="feed"] div[role="article"]');
+      const cards = page.locator('div[role="feed"] div[role="article"], a.hfpxzc');
       const totalVisible = await cards.count();
 
       onEvent({
@@ -70,9 +101,13 @@ async function scrapeGoogleMaps({ segment, city, state, maxLeads, onEvent }) {
 
       if (processed >= totalVisible) {
         onEvent({ type: 'log', message: 'Realizando scroll para carregar mais cards...' });
-        await feed.evaluate((node) => {
-          node.scrollBy(0, node.clientHeight * 0.9);
-        });
+        if (await feed.count()) {
+          await feed.evaluate((node) => {
+            node.scrollBy(0, node.clientHeight * 0.9);
+          });
+        } else {
+          await page.mouse.wheel(0, 1800);
+        }
         await page.waitForTimeout(1800);
 
         const afterScroll = await cards.count();
@@ -94,7 +129,7 @@ async function scrapeGoogleMaps({ segment, city, state, maxLeads, onEvent }) {
 
         try {
           await card.scrollIntoViewIfNeeded();
-          await card.click({ timeout: 5000 });
+          await card.click({ timeout: 5000, force: true });
           await page.waitForTimeout(1500);
 
           const name = await textOrNull(page.locator('h1.DUwDvf'));
