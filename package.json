@@ -1,0 +1,14 @@
+{
+  "name": "maps-prospeccao-app",
+  "version": "1.0.1",
+  "description": "App web para prospecção ativa via scraping do Google Maps",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "playwright": "^1.53.0"
+  }
+}
